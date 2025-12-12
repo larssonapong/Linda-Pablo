@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, Upload, Download, Trash2, Edit2, Search, X } from "lucide-react";
+import { Plus, Upload, Download, Trash2, Edit2, Search, X, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -113,6 +113,17 @@ const GuestManagement = () => {
       toast.error("Erreur lors de la suppression");
     } else {
       toast.success("Invité supprimé");
+    }
+  };
+
+  const handleCopyInvitationLink = async (invitationCode: string) => {
+    const invitationUrl = `https://invite-love.netlify.app/?i=${invitationCode}`;
+    try {
+      await navigator.clipboard.writeText(invitationUrl);
+      toast.success("Lien d'invitation copié !");
+    } catch (error) {
+      console.error("Error copying to clipboard:", error);
+      toast.error("Erreur lors de la copie");
     }
   };
 
@@ -303,6 +314,13 @@ const GuestManagement = () => {
                     </td>
                     <td className="px-4 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => handleCopyInvitationLink(guest.invitation_code)}
+                          className="p-2 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
+                          title="Copier le lien d'invitation"
+                        >
+                          <Copy className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={() => setEditingGuest(guest)}
                           className="p-2 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
