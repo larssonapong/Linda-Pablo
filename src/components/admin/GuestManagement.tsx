@@ -22,6 +22,8 @@ const GuestManagement = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingGuest, setEditingGuest] = useState<Guest | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 5;
 
   useEffect(() => {
     fetchGuests();
@@ -40,7 +42,7 @@ const GuestManagement = () => {
     const { data, error } = await supabase
       .from("guests")
       .select("*")
-      .order("created_at", { ascending: false });
+      .order("invitation_code", { ascending: false });
 
     if (error) {
       console.error("Error fetching guests:", error);
@@ -53,7 +55,15 @@ const GuestManagement = () => {
 
   const generateInvitationCode = () => {
     const prefix = "LP";
-    const number = String(guests.length + 1).padStart(3, "0");
+    const maxNumber = guests.reduce((max, g) => {
+      if (!g.invitation_code?.startsWith(prefix)) return max;
+      const numericPart = g.invitation_code.slice(prefix.length);
+      const n = Number.parseInt(numericPart, 10);
+      return Number.isFinite(n) ? Math.max(max, n) : max;
+    }, 0);
+
+    const next = maxNumber + 1;
+    const number = String(next).padStart(3, "0");
     return `${prefix}${number}`;
   };
 
@@ -71,7 +81,11 @@ const GuestManagement = () => {
 
     if (error) {
       console.error("Error adding guest:", error);
-      toast.error("Erreur lors de l'ajout de l'invité");
+      if (error.code === "23505") {
+        toast.error("Code d'invitation déjà utilisé. Choisis-en un autre.");
+      } else {
+        toast.error(`Erreur lors de l'ajout: ${error.message}${error.code ? ` (${error.code})` : ""}`);
+      }
     } else {
       toast.success("Invité ajouté avec succès");
       setShowAddModal(false);
@@ -176,7 +190,7 @@ const GuestManagement = () => {
         const { error } = await supabase.from("guests").insert(guestsToAdd);
         if (error) {
           console.error("Error importing guests:", error);
-          toast.error("Erreur lors de l'import");
+          toast.error(`Erreur lors de l'import: ${error.message}${error.code ? ` (${error.code})` : ""}`);
         } else {
           toast.success(`${guestsToAdd.length} invités importés`);
         }
@@ -218,6 +232,18 @@ const GuestManagement = () => {
       g.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       g.invitation_code.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredGuests.length / pageSize));
+  useEffect(() => {
+    setCurrentPage((p) => Math.min(Math.max(1, p), totalPages));
+  }, [totalPages]);
+
+  const startIndex = (currentPage - 1) * pageSize;
+  const pagedGuests = filteredGuests.slice(startIndex, startIndex + pageSize);
 
   return (
     <div>
@@ -271,6 +297,32 @@ const GuestManagement = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
+            <div className="flex items-center justify-between gap-3 p-4 border-b border-border">
+              <p className="text-sm text-muted-foreground font-sans">
+                {filteredGuests.length} résultat{filteredGuests.length > 1 ? "s" : ""}
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage <= 1}
+                >
+                  Précédent
+                </Button>
+                <p className="text-sm text-muted-foreground font-sans">
+                  Page {currentPage} / {totalPages}
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage >= totalPages}
+                >
+                  Suivant
+                </Button>
+              </div>
+            </div>
             <table className="w-full">
               <thead className="bg-cream">
                 <tr>
@@ -292,7 +344,7 @@ const GuestManagement = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {filteredGuests.map((guest) => (
+                {pagedGuests.map((guest) => (
                   <tr key={guest.id} className="hover:bg-cream/50 transition-colors">
                     <td className="px-4 py-4 font-mono text-sm text-primary">
                       {guest.invitation_code}
@@ -408,8 +460,8 @@ const GuestModal = ({ guest, onClose, onSave, defaultCode }: GuestModalProps) =>
               <input
                 type="text"
                 value={formData.invitation_code}
-                onChange={(e) => setFormData({ ...formData, invitation_code: e.target.value })}
-                className="w-full px-4 py-2 rounded-xl border-2 border-border bg-background font-mono"
+                readOnly
+                className="w-full px-4 py-2 rounded-xl border-2 border-border bg-muted font-mono cursor-not-allowed"
               />
             </div>
           )}
